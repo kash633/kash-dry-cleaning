@@ -60,7 +60,111 @@ function renderOrderServices(){let el=document.getElementById('orderServices');e
 function changeQty(k,d){cart[k]=Math.max(0,(cart[k]||0)+d);if(!cart[k])delete cart[k];renderOrderServices();renderSummary()}
 function getCart(){return allItems().filter(x=>cart[x.key]).map(x=>({...x,qty:cart[x.key],subtotal:x.price*cart[x.key]}))}
 function renderSummary(){let items=getCart(),method=document.getElementById('method')?.value||'';let subtotal=items.reduce((a,b)=>a+b.subtotal,0);let delivery=method==='Pickup from my address'||method==='Delivery to my address'?50:0;document.getElementById('summaryLines').innerHTML=(items.length?items.map(x=>`<div class="summary-line"><span>${x.name} × ${x.qty}</span><b>${naira(x.subtotal)}</b></div>`).join(''):'<p style="color:var(--muted)">No services selected yet.</p>')+(delivery?`<div class="summary-line"><span>UI pickup/delivery estimate</span><b>${naira(delivery)}</b></div>`:'');document.getElementById('total').textContent=naira(subtotal+delivery)}
-function placeOrder(){let items=getCart();if(!items.length)return toast('Please select at least one service.');let name=document.getElementById('customerName').value.trim(),phone=document.getElementById('customerPhone').value.trim();if(!name||!phone)return toast('Please enter your name and phone number.');let method=document.getElementById('method').value,subtotal=items.reduce((a,b)=>a+b.subtotal,0),delivery=(method==='Pickup from my address'||method==='Delivery to my address')?50:0;let order={id:'KASH-'+(1000+orders.length+1),name,phone,email:document.getElementById('customerEmail').value,method,date:document.getElementById('orderDate').value||'ASAP',time:document.getElementById('orderTime').value,address:document.getElementById('address').value,notes:document.getElementById('notes').value,payment:document.getElementById('payment').value,items,total:subtotal+delivery,status:'New',created:new Date().toISOString()};orders.unshift(order);localStorage.setItem('kashOrders',JSON.stringify(orders));document.getElementById('trackInput').value=order.id;toast('Order '+order.id+' created successfully.');showView('track');trackOrder()}
+  async function placeOrder(){
+  let items=getCart();
+
+  if(!items.length)
+    return toast('Please select at least one service.');
+
+  let name=document.getElementById('customerName').value.trim();
+  let phone=document.getElementById('customerPhone').value.trim();
+
+  if(!name||!phone)
+    return toast('Please enter your name and phone number.');
+
+  let email=document.getElementById('customerEmail').value.trim();
+  let method=document.getElementById('method').value;
+  let date=document.getElementById('orderDate').value||null;
+  let time=document.getElementById('orderTime').value;
+  let address=document.getElementById('address').value.trim();
+  let paymentMethod=document.getElementById('payment').value;
+  let notes=document.getElementById('notes').value.trim();
+
+  let subtotal=items.reduce((a,b)=>a+b.subtotal,0);
+
+  let delivery=
+    method==='Pickup from my address'||
+    method==='Delivery to my address'
+    ?50
+    :0;
+
+  let total=subtotal+delivery;
+
+  let orderNumber='KASH-'+Date.now().toString().slice(-8);
+
+  let pickupRequired=method==='Pickup from my address';
+  let deliveryRequired=method==='Delivery to my address';
+
+  let pickupAddress=pickupRequired?address:null;
+  let deliveryAddress=deliveryRequired?address:null;
+
+  let serviceTypes=[...new Set(items.map(x=>x.group))].join(', ');
+
+  let orderItems=items.map(x=>({
+    group:x.group,
+    name:x.name,
+    price:x.price,
+    qty:x.qty,
+    subtotal:x.subtotal
+  }));
+
+  const {data,error}=await supabaseClient
+    .from('orders')
+    .insert([{
+      order_number:orderNumber,
+      customer_name:name,
+      phone:phone,
+      email:email||null,
+      items:orderItems,
+      total_amount:total,
+      service_type:serviceTypes,
+      pickup_required:pickupRequired,
+      delivery_required:deliveryRequired,
+      pickup_address:pickupAddress,
+      delivery_address:deliveryAddress,
+      preferred_date:date,
+      preferred_time:time,
+      payment_status:'pending',
+      payment_method:paymentMethod,
+      order_status:'pending',
+      customer_notes:notes||null
+    }])
+    .select()
+    .single();
+
+  if(error){
+    console.error('Supabase order error:',error);
+    toast('Order could not be submitted. Please try again.');
+    return;
+  }
+
+  let localOrder={
+    id:orderNumber,
+    name:name,
+    phone:phone,
+    email:email,
+    method:method,
+    date:date||'ASAP',
+    time:time,
+    address:address,
+    notes:notes,
+    payment:paymentMethod,
+    items:items,
+    total:total,
+    status:'New',
+    created:new Date().toISOString()
+  };
+
+  orders.unshift(localOrder);
+  localStorage.setItem('kashOrders',JSON.stringify(orders));
+
+  document.getElementById('trackInput').value=orderNumber;
+
+  toast('Order '+orderNumber+' created successfully.');
+
+  showView('track');
+  trackOrder();
+}
 function trackOrder(){let id=document.getElementById('trackInput').value.trim().toUpperCase(),o=orders.find(x=>x.id===id),el=document.getElementById('trackResult');if(!o){el.innerHTML='<div class="notice danger">We could not find that order number in this prototype. Try an order created from the Order page.</div>';return}let steps=['New','Picked up','Cleaning','Ready','Delivered'],idx=steps.indexOf(o.status);el.innerHTML=`<div class="form-card" style="padding:0;border:0"><div style="display:flex;justify-content:space-between"><div><b>${o.id}</b><div style="color:var(--muted);margin-top:5px">${o.name} · ${o.method}</div></div><b style="color:var(--navy)">${naira(o.total)}</b></div><div class="track">${steps.map((s,i)=>`<div class="track-step ${i<idx?'done ':''}${i===idx?'current':''}">${s}</div>`).join('')}</div><div class="notice">Estimated turnaround depends on your selected service. ${o.date==='ASAP'?'We will process as soon as possible.':'Scheduled for '+o.date+' at '+o.time+'.'}</div></div>`}
 function renderDashboard(){let counts={new:0,cleaning:0,completed:0};orders.forEach(o=>{if(o.status==='New')counts.new++;if(o.status==='Cleaning')counts.cleaning++;if(o.status==='Delivered')counts.completed++});document.getElementById('statOrders').textContent=orders.length;document.getElementById('statNew').textContent=counts.new;document.getElementById('statCleaning').textContent=counts.cleaning;document.getElementById('statCompleted').textContent=counts.completed;document.getElementById('ordersTable').innerHTML=orders.length?orders.slice(0,12).map(o=>`<tr><td><b>${o.id}</b></td><td>${o.name}<br><small>${o.phone}</small></td><td>${o.items.slice(0,2).map(i=>i.name).join(', ')}${o.items.length>2?'…':''}</td><td>${naira(o.total)}</td><td><span class="status ${o.status.toLowerCase().replaceAll(' ','')}">${o.status}</span></td><td><select onchange="updateStatus('${o.id}',this.value)"><option ${o.status==='New'?'selected':''}>New</option><option ${o.status==='Picked up'?'selected':''}>Picked up</option><option ${o.status==='Cleaning'?'selected':''}>Cleaning</option><option ${o.status==='Ready'?'selected':''}>Ready</option><option ${o.status==='Delivered'?'selected':''}>Delivered</option></select></td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:30px">No orders yet.</td></tr>'}
 function updateStatus(id,status){let o=orders.find(x=>x.id===id);if(o){o.status=status;localStorage.setItem('kashOrders',JSON.stringify(orders));renderDashboard();toast(id+' updated to '+status)}}
