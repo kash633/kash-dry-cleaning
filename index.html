@@ -34,7 +34,17 @@ main{max-width:1180px;margin:auto;padding:0 20px 60px}.hero{display:grid;grid-te
 <div class="chat"><div class="chatbox" id="chatbox"><div class="chat-head"><strong>KASH AI Assistant</strong><small>Ask about prices, timing, pickup or orders.</small></div><div class="chat-body" id="chatBody"><div class="msg bot">Hi! 👋 I’m KASH’s assistant. I can help you choose a service, check prices, explain turnaround times, or start an order.</div></div><div class="suggestions"><button onclick="askBot('How much is wash and dry for a shirt?')">Shirt price</button><button onclick="askBot('How long does wash and dry take?')">Turnaround</button><button onclick="askBot('Do you deliver?')">Delivery</button></div><div class="chat-input"><input id="chatInput" placeholder="Type a question..." onkeydown="if(event.key==='Enter')sendChat()"><button onclick="sendChat()">Send</button></div></div><button class="chat-fab" onclick="toggleChat()">✦</button></div>
 <div class="toast" id="toast"></div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+const SUPABASE_URL = 'https://igyfpmbhaiogjvbynruy.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_NiGiRBmwgvAk5EbJ1MugXQ_YBmFPt2J';
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);
+
 const services=[
  {group:'Wash for you alone',turn:'2 hours after drop-off',items:[['Normal / casual wear',70],['Sweater / cardigan / sweatshirt',300],['Blanket / towel / bedsheet / bedspread',500],['Suits',700],['Agbada / dashiki / other natives',1000]]},
  {group:'Wash & dry',turn:'6 hours after drop-off',items:[['Normal / casual wear',150],['Sweater / cardigan / sweatshirt',500],['Blanket / towel / bedsheet / bedspread',800],['Suits',850],['Agbada / dashiki / other natives',1200]]},
